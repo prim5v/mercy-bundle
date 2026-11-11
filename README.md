@@ -1,203 +1,172 @@
-# Mercy
+# Mercy — Technical Documentation
+
+> Engineering notes for Mercy, a community-powered decentralized connectivity network.
 
 <p align="center">
-  <img src="assets/diagrams/mercy-network.svg" alt="Mercy community connectivity network" width="100%" />
+  <img src="https://raw.githubusercontent.com/prim5v/mercy-bundle/main/assets/diagrams/mercy-network.svg" alt="Illustrative Mercy peer network" width="100%" />
 </p>
 
-<p align="center">
-  <strong>A community-powered decentralized connectivity network.</strong><br/>
-  Connectivity should not depend on one access point when a community can help connect itself.
-</p>
+**Branch:** `tech` · **Audience:** developers, systems engineers and technical reviewers.  
+**Maturity:** architecture under design; implementation status is stated explicitly.
 
-<p align="center">
-  <a href="#the-problem">The problem</a> ·
-  <a href="#the-idea">The idea</a> ·
-  <a href="#how-mercy-works">How it works</a> ·
-  <a href="#privacy-permissions--control">Privacy & permissions</a> ·
-  <a href="#project-status">Project status</a>
-</p>
+## 1. System goals
 
----
+Mercy explores a device-to-device network that can discover peers, maintain direct-neighbor state, learn about remote nodes, select routes toward internet gateways, forward traffic over suitable transports, and apply consent, resource policies and usage accounting.
 
-## The problem
+The architecture separates the **control plane** (discovery, metadata exchange, route computation and policy) from the **data plane** (user traffic forwarding).
 
-Imagine you're on campus. Your data bundle is almost finished, campus Wi-Fi is unreliable or unavailable where you are, and someone a short distance away has a working internet connection they are willing to share.
+## 2. High-level architecture
 
-Today, those two people usually remain disconnected from each other. Their devices have radios and network capabilities, but there is no shared system coordinating discovery, consent, and traffic forwarding between them.
+<p align="center"><img src="diagrams/architecture.svg" alt="Mercy control plane and data plane architecture" width="100%" /></p>
 
-That is the gap Mercy is exploring.
+### Control plane
+- **Discovery agent:** advertises and scans for nearby Mercy participants.
+- **Peer handshake:** exchanges node identity, capabilities, role availability, protocol version and freshness data.
+- **Neighbor manager:** tracks direct links and their state.
+- **Topology manager:** maintains known network nodes and learned reachability.
+- **Route engine:** selects and expires paths toward destination nodes or internet gateways.
+- **Policy engine:** checks opt-in state, device constraints and provider rules.
+- **Accounting agent:** records session and byte counters without inspecting application payloads.
 
-<p align="center">
-  <img src="assets/diagrams/the-problem.svg" alt="A student without connectivity near another student with an available connection" width="100%" />
-</p>
+### Data plane
+- **Transport adapter:** establishes a usable link over a supported transport.
+- **Forwarding engine:** passes packets or framed traffic to the next hop.
+- **Gateway adapter:** provides controlled egress through an opted-in internet connection.
+- **Usage meter:** counts ingress/egress bytes per session and participant.
 
-## The idea
+A discovery radio is not automatically a traffic transport. BLE is appropriate for low-volume discovery and control messages; it should not be treated as the default bearer for internet traffic.
 
-**Mercy is a community-powered connectivity network.**
+## 3. Node roles and capabilities
 
-The project explores how nearby devices can discover one another and cooperate to extend access to an internet connection. A device with connectivity may voluntarily provide an internet gateway. Other devices may help relay traffic across the network so that a user who is not directly within range of the gateway can still reach it.
+Roles are capabilities, not mutually exclusive device types.
 
-A Mercy network is made of participating devices, not one central access point.
-
-The goal is to make connectivity sharing:
-- **Voluntary:** people decide whether their device can relay traffic or provide internet access.
-- **Visible:** participants can understand when their device is contributing and how much data is involved.
-- **Controlled:** users can set limits, pause participation, and withdraw consent.
-- **Resilient:** the network can discover alternate peers and paths when the topology changes.
-- **Privacy-conscious:** network coordination should not require reading the content of users' traffic.
-
-## How Mercy works
-
-Mercy separates participation into two main roles. A device can take on more than one role when its owner allows it.
-
-<p align="center">
-  <img src="assets/diagrams/mercy-roles.svg" alt="Mercy consumer, relay and provider roles" width="100%" />
-</p>
-
-### 1. Consumer — needs connectivity
-
-A consumer is a participant looking for a route to the internet. Mercy can discover nearby participating devices and determine whether a usable path to an internet provider exists.
-
-### 2. Relay — helps move traffic
-
-A relay forwards traffic between participating devices. It does not necessarily have its own internet connection. Relaying uses device resources, so it must be separately enabled and governed by limits such as battery, connection quality, and data or resource policies.
-
-### 3. Provider — shares an internet connection
-
-A provider makes an existing internet connection available to the Mercy network. That connection could be cellular data or a Wi-Fi connection whose owner and network rules permit sharing.
-
-A provider is not automatically a relay, and a relay is not automatically a provider. These are separate capabilities and consent decisions.
-
-### A typical connection
-
-1. **Discover:** devices advertise and scan for nearby Mercy participants using supported discovery technologies.
-2. **Evaluate:** peers exchange the minimum information needed to understand availability, capabilities, link quality, and participation rules.
-3. **Select a path:** the network evaluates direct neighbors and known routes toward an available provider.
-4. **Connect:** the participating devices establish an appropriate data path using a supported transport.
-5. **Forward:** traffic is relayed toward the provider, which gives the traffic access to the internet.
-6. **Account:** Mercy records relevant usage and network metadata so participants can see resource consumption and apply limits.
-
-<p align="center">
-  <img src="assets/diagrams/connection-flow.svg" alt="Mercy discovery, route selection, connection, forwarding and accounting flow" width="100%" />
-</p>
-
-**Important:** Bluetooth Low Energy (BLE) is useful for nearby discovery and exchanging small control messages. BLE by itself is not intended to carry ordinary internet traffic at useful broadband speeds. Data forwarding requires a suitable transport, such as a supported Wi-Fi peer-to-peer or local network connection. The exact transport strategy is still being evaluated.
-
-## Participation is a choice
-
-Installing Mercy must not silently turn a person's phone into a public internet gateway. Participation is based on clear, separate choices.
-
-| Capability | What it means | User control |
+| Role | Capability | Required condition |
 |---|---|---|
-| Discover peers | Find nearby Mercy devices | Enable/disable discovery |
-| Relay traffic | Forward traffic for another participant | Separate opt-in and resource limits |
-| Provide internet | Share an available internet connection | Separate opt-in, data limits and pause |
-| Consume connectivity | Use a route provided by the network | Connect only when a usable route is available |
+| Consumer | Requests a path to an internet gateway | User requests/permits connectivity |
+| Relay | Forwards traffic for another node | Explicit relay opt-in and policy approval |
+| Provider | Offers internet egress | Explicit provider opt-in and usable uplink |
+| Discovery participant | Announces or discovers nearby peers | Discovery permission and radio availability |
 
-A device may be discoverable without agreeing to relay traffic or provide internet access.
+A node can be a provider and relay, or consumer and relay, if the platform and user policy allow it. Role state must be exchanged as capability metadata, not inferred from installation.
 
-## Privacy, permissions & control
+## 4. Discovery and neighbor management
 
-Mercy needs certain device capabilities to discover peers and manage network connections. The exact permissions depend on the operating system, Android version, selected transport, and whether the app is running in the foreground or background.
+BLE can discover nearby peers and exchange compact control-plane messages. Discovery should account for pseudonymous identifiers, replay protection, protocol versioning, message-size limits and stale-record expiry.
 
-Potential Android permissions and capabilities include:
+A successful BLE discovery does not prove that a peer can forward internet traffic. A separate capability negotiation must establish whether a compatible data transport is available.
 
-| Permission / capability | Why it may be needed |
+Suggested peer handshake fields:
+
+| Field | Purpose |
 |---|---|
-| Nearby devices / Bluetooth permissions | BLE scanning, advertising and nearby-device connections |
-| Wi-Fi state and connection permissions | Check network state and use supported Wi-Fi transports |
-| Location permission (where required by Android) | Some Android versions require location access for certain Wi-Fi/Bluetooth scanning operations |
-| Foreground service | Keep a user-visible, active network task running when required |
-| Notifications | Show active participation, connection status and controls |
-| Network / internet access | Communicate through an available network and provide connectivity features |
+| `protocol_version` | Compatibility negotiation |
+| `node_id` | Pseudonymous node identifier |
+| `capabilities` | Supported discovery and transport features |
+| `roles_available` | Consumer, relay and/or provider capabilities |
+| `policy_flags` | Share/relay availability without exposing private settings |
+| `link_metrics` | Signal and link quality observations |
+| `sequence` | Replay and freshness handling |
+| `timestamp` / `expires_at` | Record freshness |
+| `signature` / authentication proof | Verify message origin where supported |
 
-Mercy should request permissions when the related feature is introduced, explain the reason in plain language, and handle denial gracefully. Permission grants are not a substitute for consent to relay or provide internet.
+A node identifier is not proof of identity. Authentication and trust establishment require a separate security design.
 
-### What information may be processed?
+## 5. Data model: separate what is observed from what is learned
 
-The network needs operational metadata to discover peers, select routes, protect participants, and account for resource usage. Depending on the feature enabled, this may include:
+The five logical tables are documented in [Network data models](docs/network-data-model.md). They are conceptual views, not a finalized persistence schema.
 
-- A pseudonymous Mercy node identifier.
-- Discovery timestamps and nearby peer identifiers.
-- Supported capabilities and participation preferences.
-- Link-quality indicators such as signal strength and connection state.
-- Route information, hop count, and route expiry.
-- Bytes transferred and session duration.
-- Provider availability and the type of connection being offered.
-- Usage limits and accounting records.
-
-**The intended design is to avoid collecting the contents of users' internet traffic.** Traffic content should be protected in transit, and routing/accounting should rely on the minimum metadata needed to operate the network. The exact encryption, retention, and abuse-prevention policies must be specified and reviewed before real users' traffic is carried.
-
-### User controls we intend to support
-
-- Pause or stop discovery.
-- Independently enable or disable relaying.
-- Independently enable or disable internet provision.
-- Set daily or session-based cellular-data limits.
-- View active sessions and data contributed or consumed.
-- Stop sharing immediately.
-- Choose whether participation is allowed on battery, charging, Wi-Fi, or cellular conditions.
-
-These are design goals, not claims that every control is already implemented.
-
-## Mercy accounting
-
-Mercy is exploring a contribution-accounting model for participants who voluntarily provide resources. The working concept is to recognise eligible contributions through a points or credit system referred to as **Mercy**.
-
-The accounting model must be transparent and resistant to abuse. It needs to define eligible contribution types, measurement, verification, limits, redemption, and dispute handling. No monetary value, guaranteed reward, or final exchange rate is being promised at this stage.
-
-## What Mercy is — and is not
-
-**Mercy is:**
-- An exploration of community-powered connectivity.
-- A decentralized peer discovery and routing concept.
-- A system where relaying and providing connectivity are separate opt-in roles.
-- A project that prioritises user control and transparent resource accounting.
-
-**Mercy is not yet:**
-- A production-ready mesh internet service.
-- A guarantee of internet availability or speed.
-- A replacement for mobile network operators or internet service providers.
-- A promise that every phone supports every discovery or transport feature.
-- A finished rewards or payments platform.
-
-## Project status
-
-<details>
-  <summary><strong>Current development stage</strong></summary>
-
-  Mercy is in the design and prototyping stage. The project is exploring peer discovery, neighbor tracking, multi-hop route knowledge, transport options, user consent, and resource accounting.
-
-  Architecture and implementation details are evolving. Proposed capabilities are labelled as such until they have been implemented and tested on supported devices.
-</details>
-
-| Area | Status |
+| Table | What it represents |
 |---|---|
-| Core concept and participation roles | Defined |
-| Discovery and neighbor data model | Under design |
-| Multi-hop route model | Under design |
-| Data transport strategy | Under evaluation |
-| Permission and consent model | Under design |
-| Usage accounting / Mercy credits | Under design |
-| Production deployment | Not available |
+| Discovery table | Short-lived observations from scans and advertisements |
+| Neighbor table | Current direct peer relationships |
+| Neighbor routing table | Routes whose next hop is a direct neighbor |
+| Known network nodes | Topology knowledge about direct and remote nodes |
+| Known network nodes routing table | Candidate paths through the wider network |
 
-## Get involved
+**Key distinction:** discovery is an observation; a neighbor is a direct peer relationship; a known node is topology knowledge; a route is a forwarding decision. Do not collapse these into one table.
 
-Mercy is being developed in the open. Feedback from potential users and developers will help challenge assumptions before they become implementation decisions.
+## 6. Routing model
 
-- Open an [issue](https://github.com/prim5v/mercy-bundle/issues) to discuss a problem, question, or proposal.
-- Explore the [technical documentation](https://github.com/prim5v/mercy-bundle/tree/tech) for architecture and data-model details.
-- Contributions and constructive criticism are welcome.
+The routing algorithm is not finalized. A viable design must address route freshness and expiry, link quality and transport availability, hop count and accumulated cost, loop prevention, duplicate advertisements and replay, route withdrawal, gateway availability and provider consent, and resource constraints.
 
-## Documentation
+A route score may combine normalized metrics such as hop count, link quality, expected throughput, reliability, latency and resource cost. Do not choose weights until measurements exist.
 
-- **User-facing overview:** this README on `main`.
-- **Technical overview:** [README on the `tech` branch](https://github.com/prim5v/mercy-bundle/tree/tech).
-- **Technical architecture and data models:** see the `docs/` directory on `tech`.
+For early prototypes, use deterministic and explainable route selection before introducing complex optimization. Every route should have a reason, freshness value and invalidation rule.
+
+<p align="center"><img src="diagrams/routing.svg" alt="Illustrative multi-hop Mercy topology" width="100%" /></p>
+
+## 7. Transport strategy
+
+### BLE
+Use BLE for nearby discovery, small peer advertisements, capability and policy negotiation, and route/control messages where appropriate. Do not assume BLE offers the bandwidth, MTU, latency or platform behavior required for general IP forwarding.
+
+### Wi-Fi peer transports
+Evaluate platform-supported options such as Wi-Fi Direct and Wi-Fi Aware where available. Support varies by device, Android version, hardware and API access. The transport abstraction should allow multiple implementations rather than hard-coding one radio technology.
+
+### Internet gateway
+A provider needs a controlled method to expose an uplink to the Mercy network. Android networking, tethering restrictions, VPN APIs, carrier terms, background execution limits and local network policies must be investigated. Do not assume an ordinary app can transparently share arbitrary cellular traffic on every device.
+
+## 8. Data processing lifecycle
+
+1. Scan and receive a peer advertisement.
+2. Validate message format, protocol version and freshness.
+3. Store a short-lived discovery observation.
+4. Perform peer handshake and capability negotiation.
+5. Promote the peer to the neighbor view only after required checks.
+6. Process route advertisements and update known-node topology.
+7. Compute or refresh candidate routes.
+8. Apply user consent and resource policy before selecting a route.
+9. Establish the data transport and forwarding session.
+10. Meter bytes and session metadata; expire stale state.
+
+<p align="center"><img src="diagrams/discovery-flow.svg" alt="Mercy peer discovery and neighbor lifecycle" width="100%" /></p>
+
+## 9. Permissions, consent and resource policy
+
+Permission requirements are platform/version-specific. For Android, likely areas include Bluetooth scan/connect/advertise, nearby Wi-Fi capabilities, location where required by platform/API version, foreground services, notifications, and network state/access. Exact manifest declarations must follow the actual APIs used and current Android SDK rules.
+
+**Permission is not consent.** The app must separately record user choices for peer discovery, relaying traffic, providing an internet uplink, cellular-data contribution and background operation.
+
+Example policy inputs include cellular data budget, Wi-Fi-only provider mode, battery and thermal state, user pause/stop state, link quality, expected throughput, and provider/relay availability.
+
+## 10. Security and privacy requirements
+
+Security design is a prerequisite for carrying real user traffic.
+
+- Authenticate control messages and protect against replay.
+- Use end-to-end encryption for user traffic where the application protocol supports it; relays should not need to inspect payload content.
+- Separate node identifiers from real-world identity.
+- Minimize retained metadata and define retention periods.
+- Prevent unauthorized use of a provider's connection.
+- Rate-limit discovery and control messages.
+- Protect accounting records against tampering and duplicate claims.
+- Define abuse handling, blocking and revocation.
+- Document threat models before any public network trial.
+
+## 11. Mercy contribution accounting
+
+The Mercy points/credit concept is exploratory. A future accounting system could consider verified bytes, session duration, role, reliability and policy eligibility. It must avoid rewarding fabricated traffic, collusion, replayed usage reports or low-quality routes. No final reward rate or redemption value is defined.
+
+## 12. Development roadmap
+
+| Stage | Focus | Exit criteria |
+|---|---|---|
+| 1 | Discovery prototype | Devices discover and identify peers reliably |
+| 2 | Neighbor state | Direct neighbor records update and expire correctly |
+| 3 | Topology exchange | Nodes learn about non-neighbor nodes |
+| 4 | Route computation | Routes are explainable, loop-safe and expire |
+| 5 | Transport prototype | Two peers exchange test payloads over supported Wi-Fi transport |
+| 6 | Multi-hop forwarding | Traffic crosses at least one intermediate relay |
+| 7 | Gateway prototype | A consenting provider offers controlled internet egress |
+| 8 | Policy and accounting | Opt-in, caps, pause and usage reporting work |
+| 9 | Security and field testing | Threat review, device matrix and controlled pilot |
+
+## 13. Contribution guidelines
+
+When proposing a change, include the problem, affected layer (discovery, topology, routing, transport, gateway, policy or accounting), platform/device assumptions, failure and privacy implications, and a test plan with measurable acceptance criteria.
+
+This branch is a living engineering document. Tables and algorithms are proposals until backed by code, tests and measurements. Do not describe a feature as implemented merely because it appears in this README.
 
 ---
 
-<p align="center">
-  <strong>Mercy — connectivity through cooperation.</strong><br/>
-  <sub>An evolving open project. Design proposals may change as they are tested.</sub>
-</p>
+**Mercy:** connectivity through cooperation.
