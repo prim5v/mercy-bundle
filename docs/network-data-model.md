@@ -91,7 +91,7 @@ Candidate end-to-end paths through the network. This is broader than the direct-
 
 The following is fictional sample data for explaining the distinction.
 
-Suppose node-A is our local device. It directly discovers node-B and node-C. Node-B reports that it can reach node-D through node-C. Node-D advertises provider availability.
+Suppose node-A is our local device. It directly discovers node-B and node-C. Node-B reports that it can reach node-D directly through its own next hop. Node-D advertises provider availability.
 
 ### Discovery observations at node-A
 
